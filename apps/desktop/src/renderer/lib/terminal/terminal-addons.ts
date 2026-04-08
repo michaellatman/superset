@@ -13,7 +13,12 @@ let suggestedRendererType: "webgl" | "dom" | undefined;
  * function. WebGL is deferred to rAF to avoid racing with xterm's post-open
  * viewport sync.
  */
-export function loadAddons(terminal: XTerm): () => void {
+export interface AddonHandle {
+	dispose: () => void;
+	clearTextureAtlas: () => void;
+}
+
+export function loadAddons(terminal: XTerm): AddonHandle {
 	let disposed = false;
 	let webglAddon: WebglAddon | null = null;
 
@@ -46,12 +51,19 @@ export function loadAddons(terminal: XTerm): () => void {
 		}
 	});
 
-	return () => {
-		disposed = true;
-		cancelAnimationFrame(rafId);
-		try {
-			webglAddon?.dispose();
-		} catch {}
-		webglAddon = null;
+	return {
+		dispose() {
+			disposed = true;
+			cancelAnimationFrame(rafId);
+			try {
+				webglAddon?.dispose();
+			} catch {}
+			webglAddon = null;
+		},
+		clearTextureAtlas() {
+			try {
+				webglAddon?.clearTextureAtlas();
+			} catch {}
+		},
 	};
 }

@@ -3,7 +3,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { DEFAULT_TERMINAL_SCROLLBACK } from "shared/constants";
 import type { TerminalAppearance } from "./appearance";
-import { loadAddons } from "./terminal-addons";
+import { type AddonHandle, loadAddons } from "./terminal-addons";
 
 const SERIALIZE_SCROLLBACK = 1000;
 const STORAGE_KEY_PREFIX = "terminal-buffer:";
@@ -21,7 +21,7 @@ export interface TerminalRuntime {
 	resizeObserver: ResizeObserver | null;
 	lastCols: number;
 	lastRows: number;
-	_disposeAddons: (() => void) | null;
+	_addons: AddonHandle | null;
 }
 
 function createTerminal(
@@ -137,7 +137,7 @@ export function createRuntime(
 	terminal.open(wrapper);
 	restoreBuffer(terminalId, terminal);
 
-	const disposeAddons = loadAddons(terminal);
+	const addons = loadAddons(terminal);
 
 	return {
 		terminalId,
@@ -149,7 +149,7 @@ export function createRuntime(
 		resizeObserver: null,
 		lastCols: cols,
 		lastRows: rows,
-		_disposeAddons: disposeAddons,
+		_addons: addons,
 	};
 }
 
@@ -160,9 +160,11 @@ export function attachToContainer(
 ) {
 	runtime.container = container;
 	container.appendChild(runtime.wrapper);
-	measureAndResize(runtime);
 
-	// Renderer may have skipped frames while the wrapper was detached.
+	// Rebuild stale WebGL glyph cache after DOM reattach.
+	runtime._addons?.clearTextureAtlas();
+
+	measureAndResize(runtime);
 	runtime.terminal.refresh(0, runtime.terminal.rows - 1);
 
 	runtime.resizeObserver?.disconnect();
@@ -208,8 +210,8 @@ export function updateRuntimeAppearance(
 }
 
 export function disposeRuntime(runtime: TerminalRuntime) {
-	runtime._disposeAddons?.();
-	runtime._disposeAddons = null;
+	runtime._addons?.dispose();
+	runtime._addons = null;
 	runtime.resizeObserver?.disconnect();
 	runtime.resizeObserver = null;
 	runtime.wrapper.remove();
